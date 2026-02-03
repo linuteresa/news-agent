@@ -1,0 +1,25 @@
+name: Daily News Agent
+
+on:
+  schedule:
+    - cron: '0 12 * * *' # Runs every day at 12:00 UTC (8:00 AM EST)
+  workflow_dispatch:
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          pip install feedparser google-generativeai
+      - name: Run Agent
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+        run: python email_agent.py
