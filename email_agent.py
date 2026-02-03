@@ -1,4 +1,3 @@
-from http.client import responses
 
 import feedparser
 import smtplib
@@ -7,77 +6,124 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 
-from config import GOOGLE_API_KEY, EMAIL_SENDER, EMAIL_RECEIVER, EMAIL_PASSWORD
+from config import GOOGLE_API_KEY, EMAIL_SENDER, EMAIL_PASSWORD, NUM_ARTICLES, get_email_receivers
 
-RSS_FEEDS = {
-    "TechCrunch": "https://techcrunch.com/feed/",
-    "The Verge": "https://www.theverge.com/rss/index.xml",
-    "Hacker News": "https://news.ycombinator.com/rss",
-    "BBC World": "http://feeds.bbci.co.uk/news/world/rss.xml"
+
+RSS_CATEGORIES = {
+    "🚀 Tech & AI": {
+        "TechCrunch": "https://techcrunch.com/feed/",
+        "The Verge": "https://www.theverge.com/rss/index.xml",
+        "Hacker News": "https://news.ycombinator.com/rss",
+        "Wired": "https://www.wired.com/feed/category/science/latest/rss"
+    },
+    "💰 Finance & Markets": {
+        "CNBC Top News": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "Financial Times (World)": "https://www.ft.com/?format=rss"
+    },
+    "🏆 Sports": {
+        "ESPN Top Headlines": "https://www.espn.com/espn/rss/news",
+        "BBC Sport": "http://feeds.bbci.co.uk/sport/rss.xml"
+    },
+    "🌍 Global Affairs": {
+        "BBC World": "http://feeds.bbci.co.uk/news/world/rss.xml",
+        "NY Times (Top Stories)": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+        "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml"
+    }
 }
 
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-2.5-flash')
+
 
 def get_summaries():
-    """Fetches and summarizes news items"""
+    """Fetches and summarizes news items, grouped by category."""
     briefing_content = ""
 
-    for source,url in RSS_FEEDS.items():
-        feed = feedparser.parse(url)
-        top_articles = feed.entries[:4]
+    for category, feeds in RSS_CATEGORIES.items():
+        if not feeds: continue
 
-        briefing_content += f"<h2>Lastest from {source}</h2>\n"
+        briefing_content += f"""
+        <div style="background-color: #2c3e50; color: #ffffff; padding: 10px 15px; border-radius: 5px 5px 0 0; margin-top: 30px;">
+            <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">{category}</h2>
+        </div>
+        <div style="border: 2px solid #2c3e50; border-top: none; padding: 15px; border-radius: 0 0 5px 5px; background-color: #fff;">
+        """
 
-        for article in top_articles:
-            prompt = f"Summarize this news title and snippet in one concise sentence: {article.title} - {article.desciption}"
+        for source, url in feeds.items():
             try:
-                response =  model.generate_content(prompt)
-                summary = response.text.strip()
-            except:
-                summary = article.title
+                feed = feedparser.parse(url)
 
-            briefing_content += f"""
-                        <div style="margin-bottom: 15px; border-left: 4px solid #007bff; padding-left: 10px;">
-                            <h3 style="margin: 0;"><a href="{article.link}" style="text-decoration: none; color: #333;">{article.title}</a></h3>
-                            <p style="color: #555; font-style: italic; margin-top: 5px;">{summary}</p>
+                briefing_content += f"""
+                <div style="margin-top: 25px; margin-bottom: 15px; border-bottom: 1px solid #eee;">
+                    <span style="font-size: 12px; font-weight: bold; color: #888; text-transform: uppercase;">{source}</span>
+                </div>
+                """
+
+                top_articles = feed.entries[:NUM_ARTICLES]
+
+                for article in top_articles:
+                    try:
+                        prompt = f"Summarize this news title and snippet in one concise sentence: {article.title} - {article.get('description', '')}"
+                        response = model.generate_content(prompt)
+                        summary = response.text.strip()
+                    except:
+                        summary = article.title
+
+                    briefing_content += f"""
+                        <div style="margin-bottom: 20px;">
+                            <p style="margin: 0 0 5px 0; font-size: 16px; line-height: 1.4;">
+                                <strong><a href="{article.link}" style="text-decoration: none; color: #0056b3;">{article.title}</a></strong>
+                            </p>
+                            <p style="color: #333; font-size: 14px; line-height: 1.5; margin: 0;">{summary}</p>
                         </div>
-                        """
+                    """
+            except Exception as e:
+                print(f"Error fetching {source}: {e}")
+
+        briefing_content += "</div>"
 
     return briefing_content
 
 def send_email(content):
-    """Send an email"""
+    receivers = get_email_receivers()
     msg = MIMEMultipart("alternative")
-    msg["From"] = "Ai news agent <"+ EMAIL_SENDER +">"
-    msg["To"] = EMAIL_RECEIVER
+    msg["From"] = "Linu's AI News Agent <" + EMAIL_SENDER + ">"
     msg["Subject"] = f"🌍 Morning Briefing: {datetime.now().strftime('%Y-%m-%d')}"
+    msg["To"] = f"You, my special human"
 
     html_body = f"""
-        <html>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6;">
-            <h1 style="color: #2c3e50;">Good Morning! Here is your update.</h1>
-            <hr>
+    <html>
+      <body style="font-family: Helvetica, Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px; border-radius: 10px;">
+            <h1 style="color: #333; text-align: center; font-size: 24px;">Your Morning Briefing</h1>
             {content}
-            <hr>
-            <p style="font-size: 12px; color: #999;">Generated by your Personal AI Agent</p>
-          </body>
-        </html>
-        """
+            <div style="margin-top: 40px; text-align: center; font-size: 12px; color: #aaa;">
+                Generated by Personal AI Agent
+            </div>
+        </div>
+      </body>
+    </html>
+    """
     msg.attach(MIMEText(html_body, 'html'))
 
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-        server.send_message(msg)
+
+        server.send_message(msg, from_addr=EMAIL_SENDER, to_addrs=receivers)
+
         server.quit()
-        print("✅Email sent!")
+        print(f"✅ Email sent successfully to {len(receivers)} recipients!")
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
+
 
 if __name__ == "__main__":
     print("🤖 Agent waking up...")
     news_html = get_summaries()
-    send_email(news_html)
-    print("💤 Agent going back to sleep.")
+    if news_html:
+        send_email(news_html)
+    else:
+        print("⚠️ No news found to send.")
+    print("💤 Agent sleeping.")
