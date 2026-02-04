@@ -20,7 +20,7 @@ jobs:
       - name: Run Agent
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_USER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
           EMAIL_RECEIVER2: ${{ secrets.EMAIL_RECEIVER2 }}
