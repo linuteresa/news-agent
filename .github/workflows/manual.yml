@@ -20,10 +20,11 @@ jobs:
       - name: Run Agent
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          EMAIL_USER: ${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
           EMAIL_RECEIVER2: ${{ secrets.EMAIL_RECEIVER2 }}
           EMAIL_RECEIVER3: ${{ secrets.EMAIL_RECEIVER3 }}
           EMAIL_RECEIVER4: ${{ secrets.EMAIL_RECEIVER4 }}
+          NUM_ARTICLES: ${{ secrets.NUM_ARTICLES }}
         run: python email_agent.py
