@@ -2,7 +2,7 @@ name: Daily News Agent
 
 on:
   schedule:
-    - cron: '0 12 * * *' # Runs every day at 12:00 UTC (8:00 AM EST)
+    - cron: '0 12 * * *' 
   workflow_dispatch:
 
 jobs:
@@ -13,13 +13,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'
       - name: Install dependencies
         run: |
-          pip install feedparser google-generativeai
+          pip install feedparser google-genai python-dotenv
       - name: Run Agent
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+          EMAIL_RECEIVER2: ${{ secrets.EMAIL_RECEIVER2 }}
+          EMAIL_RECEIVER3: ${{ secrets.EMAIL_RECEIVER3 }}
+          EMAIL_RECEIVER4: ${{ secrets.EMAIL_RECEIVER4 }}
         run: python email_agent.py
