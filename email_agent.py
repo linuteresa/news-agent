@@ -4,6 +4,7 @@ from google import genai
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
+from helper import is_recent, deduplicate_articles
 import time
 
 from config import GOOGLE_API_KEY, EMAIL_SENDER, EMAIL_PASSWORD, NUM_ARTICLES, get_email_receivers
@@ -87,36 +88,39 @@ def get_summaries():
     for category, sources in RSS_CATEGORIES.items():
         if not sources: continue
 
-        briefing_content += f"""<h2 style="background-color: #eee; padding: 10px; border-radius: 5px; margin-top: 20px;">{category}</h2>"""
-
+        articles_by_source = {}
         for source, url in sources.items():
-            print(f"Processing {source} (Batching)...")
-
             try:
                 feed = feedparser.parse(url)
-                top_articles = feed.entries[:NUM_ARTICLES]
+                recent = [e for e in feed.entries if is_recent(e)][:NUM_ARTICLES]
+                if recent:
+                    articles_by_source[source] = recent
+            except Exception as e:
+                print(f"Error fetching {source}: {e}")
 
-                if not top_articles:
-                    continue
+        articles_by_source = deduplicate_articles(articles_by_source)
 
-                summaries_map = generate_batch_summaries(source, top_articles)
+        if not articles_by_source:
+            continue
 
-                time.sleep(4)
-                # ------------------------
+        briefing_content += f'<h2 style="background-color: #eee; padding: 10px; border-radius: 5px; margin-top: 20px;">{category}</h2>'
 
-                for article in top_articles:
-                    summary = summaries_map.get(article.title, article.title)
 
-                    briefing_content += f"""
+        for source, top_articles in articles_by_source.items():
+            print(f"Processing {source} (Batching)...")
+            summaries_map = generate_batch_summaries(source, top_articles)
+            time.sleep(4)
+
+            for article in top_articles:
+                summary = summaries_map.get(article.title, article.title)
+                briefing_content += f"""
                         <div style="margin-bottom: 20px;">
                             <p style="margin: 0 0 5px 0; font-size: 16px; line-height: 1.4;">
-                                <strong><a href="{article.link}" style="text-decoration: none; color: #0056b3;"> {article.title}</a></strong>
+                                <strong><a href="{article.link}" style="text-decoration: none; color: #0056b3;">{article.title}</a></strong>
                             </p>
                             <p style="color: #333; font-size: 14px; line-height: 1.5; margin: 0;">{summary}</p>
                         </div>
-                    """
-            except Exception as e:
-                print(f"Error fetching feed for {source}: {e}")
+                        """
 
     return briefing_content
 
