@@ -2,7 +2,7 @@ name: Daily News Agent
 
 on:
   schedule:
-    - cron: '0 12 * * *' 
+    - cron: '7 15 * * *' # Runs every day at 15:07 UTC (10:07 AM EST / 11:07 AM EDT) — offset from :00 to avoid GitHub's top-of-hour scheduling delays
   workflow_dispatch:
 
 jobs:
