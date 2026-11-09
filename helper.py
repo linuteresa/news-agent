@@ -15,9 +15,11 @@ import re
 def normalize_title(title):
     return re.sub(r'[^a-z0-9 ]', '', title.lower()).strip()
 
-def deduplicate_articles(articles_by_source):
+def deduplicate_articles(articles_by_source, already_seen_titles=()):
 
-    seen_words = []
+    # Titles already covered elsewhere in the email (e.g. the AI brief) count as seen.
+    seen_words = [set(normalize_title(t).split()) for t in already_seen_titles]
+    seen_words = [w for w in seen_words if len(w) >= 3]
 
     def is_duplicate(title):
         words = set(normalize_title(title).split())
