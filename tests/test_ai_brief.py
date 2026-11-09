@@ -56,15 +56,21 @@ def use_fake_feeds(monkeypatch, news=None, papers=None):
 
 
 class FakeClient:
-    def __init__(self, text=None, error=None):
-        self.text, self.error, self.calls = text, error, 0
+    """Fails with `error` for the first `fail_times` calls (all calls if fail_times is None)."""
+    def __init__(self, text=None, error=None, fail_times=None):
+        self.text, self.error, self.fail_times, self.calls = text, error, fail_times, 0
         self.models = self
 
     def generate_content(self, model, contents, config=None):
         self.calls += 1
-        if self.error:
+        # The live API rejected JSON mode on v1, so the brief must not ask for it.
+        assert config is None
+        if self.error and (self.fail_times is None or self.calls <= self.fail_times):
             raise self.error
         return SimpleNamespace(text=self.text)
+
+
+NO_SLEEP = dict(sleep=lambda s: None)
 
 
 def test_collect_filters_old_duplicate_revised_and_survives_broken_feed():
@@ -128,15 +134,32 @@ def test_full_flow_with_fakes(monkeypatch):
 
 def test_fallback_when_gemini_fails(monkeypatch):
     use_fake_feeds(monkeypatch)
-    out, _ = ai_brief.get_ai_brief(FakeClient(error=RuntimeError("quota")), "m", parse=fake_parse)
+    client = FakeClient(error=RuntimeError("quota"))
+    out, _ = ai_brief.get_ai_brief(client, "m", parse=fake_parse, **NO_SLEEP)
+    assert client.calls == 3  # first try + 2 retries
     assert "Summaries were unavailable" in out
     assert 'href="https://lab.example/model"' in out
 
 
 def test_fallback_when_gemini_returns_bad_json(monkeypatch):
     use_fake_feeds(monkeypatch)
-    out, _ = ai_brief.get_ai_brief(FakeClient(text="not json"), "m", parse=fake_parse)
+    out, _ = ai_brief.get_ai_brief(FakeClient(text="not json"), "m", parse=fake_parse, **NO_SLEEP)
     assert "Summaries were unavailable" in out
+
+
+def test_retries_after_transient_503(monkeypatch):
+    use_fake_feeds(monkeypatch)
+    waits = []
+    client = FakeClient(text=good_json(), error=RuntimeError("503 UNAVAILABLE high demand"), fail_times=1)
+    out, _ = ai_brief.get_ai_brief(client, "m", parse=fake_parse, sleep=waits.append)
+    assert client.calls == 2 and waits == [15]
+    assert "Top stories" in out and "Summaries were unavailable" not in out
+
+
+def test_parse_brief_ignores_text_around_json():
+    items = collect()
+    brief = ai_brief.parse_brief("Here is the brief:\n" + good_json() + "\nHope this helps!", items)
+    assert brief["top_stories"]
 
 
 def test_no_items_means_no_section_and_no_gemini_call(monkeypatch):

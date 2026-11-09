@@ -59,10 +59,19 @@ def generate_batch_summaries(source_name, articles):
 
     try:
 
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt
-        )
+        # Retry once on transient errors such as 503 "high demand".
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt
+                )
+                break
+            except Exception as e:
+                if attempt == 1:
+                    raise
+                print(f"⚠️ {source_name}: {e}; retrying in 15s...")
+                time.sleep(15)
 
 
         raw_text = response.text.strip()

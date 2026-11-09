@@ -9,6 +9,7 @@ email comes from the feeds themselves, so it can't invent sources.
 import html
 import json
 import re
+import time
 
 import feedparser
 
@@ -99,7 +100,7 @@ def build_prompt(items):
         "Below are today's AI news items and new research papers, each with an ID.",
         "Use ONLY these items. Never invent facts, numbers or stories that aren't in them.",
         "",
-        "Return JSON with exactly this shape:",
+        "Return ONLY a JSON object (no markdown, no other text) with exactly this shape:",
         '{',
         '  "quiet_day": true or false (true if nothing significant happened),',
         '  "top_stories": [ up to 3 of the most important NEWS items:',
@@ -126,8 +127,10 @@ def build_prompt(items):
 def parse_brief(raw_text, items):
     """Parse Gemini's JSON and drop anything pointing at an unknown item ID."""
     text = raw_text.strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
-    data = json.loads(text)
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("no JSON object in response")
+    data = json.loads(text[start:end + 1])
     by_id = {it["id"]: it for it in items}
 
     def valid(entry):
@@ -224,24 +227,31 @@ def render_fallback(items, limit=8):
             f'<ul style="padding-left: 20px; margin: 0;">{rows}</ul>')
 
 
-def get_ai_brief(client, model, hours=24, parse=feedparser.parse):
-    """Returns (html, items). html is "" if there was nothing to report."""
+def get_ai_brief(client, model, hours=24, parse=feedparser.parse, retry_waits=(15, 45), sleep=time.sleep):
+    """Returns (html, items). html is "" if there was nothing to report.
+
+    Retries a failed or unusable Gemini answer (e.g. 503 high demand) before
+    falling back to plain headlines.
+    """
     items = collect_items(hours=hours, parse=parse)
     if not items:
         print("⚠️ No AI items found for the brief.")
         return "", items
 
     print(f"🧠 Building AI brief from {len(items)} items...")
-    try:
-        response = client.models.generate_content(
-            model=model,
-            contents=build_prompt(items),
-            config={"response_mime_type": "application/json"},
-        )
-        brief = parse_brief(response.text, items)
-        if not (brief["top_stories"] or brief["quick_hits"]):
-            raise ValueError("brief came back empty")
-        return render_brief(brief, items), items
-    except Exception as e:
-        print(f"❌ AI brief error, falling back to headlines: {e}")
-        return render_fallback(items), items
+    prompt = build_prompt(items)
+    waits = list(retry_waits)
+    while True:
+        try:
+            response = client.models.generate_content(model=model, contents=prompt)
+            brief = parse_brief(response.text, items)
+            if not (brief["top_stories"] or brief["quick_hits"]):
+                raise ValueError("brief came back empty")
+            return render_brief(brief, items), items
+        except Exception as e:
+            if not waits:
+                print(f"❌ AI brief error, falling back to headlines: {e}")
+                return render_fallback(items), items
+            wait = waits.pop(0)
+            print(f"⚠️ AI brief attempt failed ({e}); retrying in {wait}s...")
+            sleep(wait)
